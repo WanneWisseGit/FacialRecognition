@@ -260,6 +260,14 @@ def image_to_embedding(image, model):
     #print(embedding)
     return embedding
 
+def adjust_gamma(image, gamma):
+
+   invGamma = 1.0 / gamma
+   table = np.array([((i / 255.0) ** invGamma) * 255
+      for i in np.arange(0, 256)]).astype("uint8")
+
+   return cv2.LUT(image, table)
+
 def recognize_face(face_image, input_embeddings, model):
 
     embedding = image_to_embedding(face_image, model)
@@ -283,7 +291,7 @@ def recognize_face(face_image, input_embeddings, model):
             dis = minimum_distance
             name = input_name
     
-    if minimum_distance < 0.7:
+    if minimum_distance < 0.8:
         print('name %s distance %s' %(str(name), str(dis)))
         return str(name)
         
@@ -300,6 +308,8 @@ def create_input_image_embeddings():
         image_file = cv2.imread(file, 1)
         detected_faces = face_detector(image_file, 1)
         preprocessed = landmarks(image_file,detected_faces)
+        adjusted = adjust_gamma(preprocessed, 0.5)
+        cv2.imwrite("test/" + person_name + ".jpg", adjusted)
         input_embeddings[person_name] = image_to_embedding(preprocessed, model)
 
     return input_embeddings
@@ -323,7 +333,6 @@ def recognize_faces_in_cam(input_embeddings):
    
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
     
     
     while True:
@@ -331,7 +340,7 @@ def recognize_faces_in_cam(input_embeddings):
         ret, frame = vc.read()
 
         
-        
+        img = frame
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         detected_faces = face_detector(frame, 1)
         # Loop through all the faces detected 
@@ -339,8 +348,9 @@ def recognize_faces_in_cam(input_embeddings):
         for i, face_rect in enumerate(detected_faces):
            
             preprocessed = landmarks(frame,detected_faces)
-            
-            identity = recognize_face(preprocessed, input_embeddings, model)
+            adjusted = adjust_gamma(preprocessed, 0.5)
+            cv2.imwrite("test/henk.jpg", adjusted)
+            identity = recognize_face(adjusted, input_embeddings, model)
             if identity is not None:
                 img = cv2.rectangle(frame, (face_rect.left(),  face_rect.top()),(face_rect.right(),face_rect.bottom()), (0, 255, 0), 2) 
                 cv2.putText(img, str(identity), (face_rect.left()+5,face_rect.right()-5), font, 1, (255,255,255), 2)
