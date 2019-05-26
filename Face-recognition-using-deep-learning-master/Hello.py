@@ -16,6 +16,10 @@ import tensorflow as tf
 from utils import LRN2D
 import utils
 import dlib
+from skimage import data, img_as_float
+from skimage import exposure
+from PIL import Image
+import math
 
 myInput = Input(shape=(96, 96, 3))
 
@@ -253,12 +257,25 @@ def image_to_embedding(image, model):
     #image = cv2.resize(image, (96, 96), interpolation=cv2.INTER_AREA) 
     image = cv2.resize(image, (96, 96)) 
     img = image[...,::-1]
+    
     img = np.around(np.transpose(img, (0,1,2))/255.0, decimals=12)
     x_train = np.array([img])
     embedding = model.predict_on_batch(x_train)
     #print("embedding: ")
     #print(embedding)
     return embedding
+
+def calculate_brightness(image):
+    greyscale_image = image.convert('L')
+    histogram = greyscale_image.histogram()
+    pixels = sum(histogram)
+    brightness = scale = len(histogram)
+
+    for index in range(0, scale):
+        ratio = histogram[index] / pixels
+        brightness += ratio * (-scale + index)
+
+    return 1 if brightness == 255 else brightness / scale
 
 def adjust_gamma(image, gamma):
 
@@ -291,7 +308,7 @@ def recognize_face(face_image, input_embeddings, model):
             dis = minimum_distance
             name = input_name
     
-    if minimum_distance < 0.8:
+    if minimum_distance < 0.7:
         print('name %s distance %s' %(str(name), str(dis)))
         return str(name)
         
@@ -308,10 +325,25 @@ def create_input_image_embeddings():
         image_file = cv2.imread(file, 1)
         detected_faces = face_detector(image_file, 1)
         preprocessed = landmarks(image_file,detected_faces)
-        adjusted = adjust_gamma(preprocessed, 0.5)
-        cv2.imwrite("test/" + person_name + ".jpg", adjusted)
-        input_embeddings[person_name] = image_to_embedding(preprocessed, model)
+        cv2.imwrite("pictures/landmark.jpg", preprocessed)
 
+        im = Image.open("pictures/landmark.jpg")
+        a = calculate_brightness(im)
+        c = -0.3/math.log10(a)
+        g = np.array(im)
+        gamma_corrected = exposure.adjust_gamma(g, c)
+        
+        gamma_corrected_image = Image.fromarray(gamma_corrected)
+        gamma_corrected_image.save("pictures/gamma.png")
+        # gamma_corrected_image.show()
+
+        i = exposure.equalize_adapthist(gamma_corrected)
+        ii = Image.fromarray((i * 255).astype(np.uint8))
+        ii.save("pictures/"+ person_name + "temp.jpg")
+        ii.save("pictures/temp.jpg")
+        temp = cv2.imread("pictures/temp.jpg")
+        input_embeddings[person_name] = image_to_embedding(temp, model)
+        
     return input_embeddings
 
 def landmarks(img,dets):
@@ -348,9 +380,22 @@ def recognize_faces_in_cam(input_embeddings):
         for i, face_rect in enumerate(detected_faces):
            
             preprocessed = landmarks(frame,detected_faces)
-            adjusted = adjust_gamma(preprocessed, 0.5)
-            cv2.imwrite("test/henk.jpg", adjusted)
-            identity = recognize_face(adjusted, input_embeddings, model)
+            cv2.imwrite("pictures/livelandmark.jpg", preprocessed)
+            im = Image.open("pictures/livelandmark.jpg")
+            a = calculate_brightness(im)
+            c = -0.3/math.log10(a)
+            g = np.array(im)
+            gamma_corrected = exposure.adjust_gamma(g, c)
+            
+            gamma_corrected_image = Image.fromarray(gamma_corrected)
+            gamma_corrected_image.save("pictures/livegamma.png")
+            # gamma_corrected_image.show()
+
+            i = exposure.equalize_adapthist(gamma_corrected)
+            ii = Image.fromarray((i * 255).astype(np.uint8))
+            ii.save("pictures/livetemp.jpg")
+            temp = cv2.imread("pictures/livetemp.jpg")
+            identity = recognize_face(temp, input_embeddings, model)
             if identity is not None:
                 img = cv2.rectangle(frame, (face_rect.left(),  face_rect.top()),(face_rect.right(),face_rect.bottom()), (0, 255, 0), 2) 
                 cv2.putText(img, str(identity), (face_rect.left()+5,face_rect.right()-5), font, 1, (255,255,255), 2)
