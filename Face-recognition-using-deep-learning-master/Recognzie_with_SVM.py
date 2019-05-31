@@ -20,6 +20,9 @@ from skimage import data, img_as_float
 from skimage import exposure
 from PIL import Image
 import math
+from sklearn import svm
+from sklearn.metrics import accuracy_score
+from string import digits
 
 myInput = Input(shape=(96, 96, 3))
 
@@ -285,67 +288,67 @@ def adjust_gamma(image, gamma):
 
    return cv2.LUT(image, table)
 
-def recognize_face(face_image, input_embeddings, model):
+def recognize_face(face_image,model,clf):
 
     embedding = image_to_embedding(face_image, model)
+    wt = np.array(embedding)
+    prob = clf.predict_proba(wt)
     
-    minimum_distance = 200
-    name = None
-    dis = 0
-    
-    # Loop over  names and encodings.
-    for (input_name, input_embedding) in input_embeddings.items():
-        
-       
-        euclidean_distance = np.linalg.norm(embedding-input_embedding)
-        
-
-        #print('Euclidean distance from %s is %s' %(input_name, euclidean_distance))
-
-        
-        if euclidean_distance < minimum_distance:
-            minimum_distance = euclidean_distance
-            dis = minimum_distance
-            name = input_name
-    
-    if minimum_distance < 0.6:
-        print('name %s distance %s' %(str(name), str(dis)))
-        return str(name)
-        
+    name = clf.predict(wt)
+    bl = False
+    it = np.nditer(prob, flags=['f_index'])
+    while not it.finished:
+        if it[0]>0.8:
+            bl = True
+        it.iternext()
+    if bl == True:
+        return str(name[0])
     else:
-        return None
+        return "unknown"
+    
+    print(clf.decision_function(wt))
+    print(name)
+    return str(name[0])
+        
 
 import glob
 
 def create_input_image_embeddings():
-    input_embeddings = {}
+    input_embeddings = []
+    names = []
 
-    for file in glob.glob("images/*"):
+    for file in glob.glob("SVM_images/*"):
         person_name = os.path.splitext(os.path.basename(file))[0]
         image_file = cv2.imread(file, 1)
-        detected_faces = face_detector(image_file, 1)
-        preprocessed = landmarks(image_file,detected_faces)
-        cv2.imwrite("pictures/landmark.jpg", preprocessed)
+        dets = face_detector(image_file, 1)
+        align = landmarks(image_file,d)
+        image = dlib.get_face_chip(image_file, align)
+        dets2 = detector(image, 1)
+        align2 = landmarks(image,d)
+        crop_img = image[b.top():b.bottom(),b.left():b.right()]
+                cv2.imwrite("SVM_Pre/landmark.jpg", crop_img)
+        # preprocessed = landmarks(image_file,detected_faces)
+        # detected_faces1 = face_detector(preprocessed, 1)
+        
 
-        im = Image.open("pictures/landmark.jpg")
+        im = Image.open("SVM_Pre/landmark.jpg")
         a = calculate_brightness(im)
         c = -0.3/math.log10(a)
         g = np.array(im)
         gamma_corrected = exposure.adjust_gamma(g, c)
         
         gamma_corrected_image = Image.fromarray(gamma_corrected)
-        gamma_corrected_image.save("pictures/gamma.png")
+        gamma_corrected_image.save("SVM_Pre/gamma.png")
         # gamma_corrected_image.show()
 
         i = exposure.equalize_adapthist(gamma_corrected)
         ii = Image.fromarray((i * 255).astype(np.uint8))
-        ii.save("pictures/"+ person_name + "temp.jpg")
-        ii.save("pictures/temp.jpg")
-        temp = cv2.imread("pictures/temp.jpg")
-        input_embeddings[person_name] = image_to_embedding(temp, model)
-        
-    return input_embeddings
-
+        ii.save("SVM_Pre/"+ person_name + "temp.jpg")
+        ii.save("SVM_Pre/temp.jpg")
+        temp = cv2.imread("SVM_Pre/temp.jpg")
+        input_embeddings.append(image_to_embedding(temp, model))
+        names.append(person_name)
+    return input_embeddings,names
 def landmarks(img,dets):
     faces = dlib.full_object_detections()
     for detection in dets:
@@ -355,10 +358,7 @@ def landmarks(img,dets):
     for image in images:
        return image
 
-def recognize_faces_in_cam(input_embeddings):
-    
-
-   
+def recognize_faces_in_cam(input_embeddings,clf):
 
     cv2.namedWindow("Face Recognizer")
     vc = cv2.VideoCapture(0)
@@ -395,7 +395,7 @@ def recognize_faces_in_cam(input_embeddings):
             ii = Image.fromarray((i * 255).astype(np.uint8))
             ii.save("pictures/livetemp.jpg")
             temp = cv2.imread("pictures/livetemp.jpg")
-            identity = recognize_face(temp, input_embeddings, model)
+            identity = recognize_face(temp, model, clf)
             if identity is not None:
                 img = cv2.rectangle(frame, (face_rect.left(),  face_rect.top()),(face_rect.right(),face_rect.bottom()), (0, 255, 0), 2) 
                 cv2.putText(img, str(identity), (face_rect.left()+5,face_rect.right()-5), font, 1, (255,255,255), 2)
@@ -408,5 +408,18 @@ def recognize_faces_in_cam(input_embeddings):
     vc.release()
     cv2.destroyAllWindows()
 
-input_embeddings = create_input_image_embeddings()
-recognize_faces_in_cam(input_embeddings)
+input_embeddings,names = create_input_image_embeddings()
+for i in names:
+    index = names.index(i)
+    remove_digits = str.maketrans('', '', digits)
+    res = i.translate(remove_digits)
+    names[index] = res
+
+#print(input_embeddings)
+
+rt = np.array(input_embeddings)
+nsamples, nx, ny = rt.shape
+d2_train_dataset = rt.reshape((nsamples,nx*ny))
+clf = svm.SVC(kernel='linear', probability=True)
+svc = clf.fit(d2_train_dataset,names)
+recognize_faces_in_cam(input_embeddings,clf)

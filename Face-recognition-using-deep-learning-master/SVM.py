@@ -20,6 +20,10 @@ from skimage import data, img_as_float
 from skimage import exposure
 from PIL import Image
 import math
+from sklearn import svm
+from sklearn.metrics import accuracy_score
+from string import digits
+
 
 myInput = Input(shape=(96, 96, 3))
 
@@ -238,7 +242,6 @@ norm_layer = Lambda(lambda  x: K.l2_normalize(x, axis=1), name='norm_layer')(den
 # Final Model
 model = Model(inputs=[myInput], outputs=norm_layer)
 
-# Load weights from csv files (which was exported from Openface torch model)
 weights = utils.weights
 weights_dict = utils.load_weights()
 
@@ -254,16 +257,21 @@ for name in weights:
     model.get_layer(name).set_weights(weights_dict[name])
 
 def image_to_embedding(image, model):
-    #image = cv2.resize(image, (96, 96), interpolation=cv2.INTER_AREA) 
     image = cv2.resize(image, (96, 96)) 
     img = image[...,::-1]
-    
     img = np.around(np.transpose(img, (0,1,2))/255.0, decimals=12)
     x_train = np.array([img])
     embedding = model.predict_on_batch(x_train)
-    #print("embedding: ")
-    #print(embedding)
     return embedding
+def landmarks(img,dets):
+    faces = dlib.full_object_detections()
+    for detection in dets:
+        faces.append(sp(img, detection))
+
+    images = dlib.get_face_chips(img, faces)
+    for image in images:
+       return image
+
 
 def calculate_brightness(image):
     greyscale_image = image.convert('L')
@@ -277,136 +285,85 @@ def calculate_brightness(image):
 
     return 1 if brightness == 255 else brightness / scale
 
-def adjust_gamma(image, gamma):
-
-   invGamma = 1.0 / gamma
-   table = np.array([((i / 255.0) ** invGamma) * 255
-      for i in np.arange(0, 256)]).astype("uint8")
-
-   return cv2.LUT(image, table)
-
-def recognize_face(face_image, input_embeddings, model):
-
-    embedding = image_to_embedding(face_image, model)
-    
-    minimum_distance = 200
-    name = None
-    dis = 0
-    
-    # Loop over  names and encodings.
-    for (input_name, input_embedding) in input_embeddings.items():
-        
-       
-        euclidean_distance = np.linalg.norm(embedding-input_embedding)
-        
-
-        #print('Euclidean distance from %s is %s' %(input_name, euclidean_distance))
-
-        
-        if euclidean_distance < minimum_distance:
-            minimum_distance = euclidean_distance
-            dis = minimum_distance
-            name = input_name
-    
-    if minimum_distance < 0.6:
-        print('name %s distance %s' %(str(name), str(dis)))
-        return str(name)
-        
-    else:
-        return None
-
 import glob
-
 def create_input_image_embeddings():
-    input_embeddings = {}
+    input_embeddings = []
+    names = []
 
-    for file in glob.glob("images/*"):
+    for file in glob.glob("SVM_images/*"):
         person_name = os.path.splitext(os.path.basename(file))[0]
         image_file = cv2.imread(file, 1)
         detected_faces = face_detector(image_file, 1)
         preprocessed = landmarks(image_file,detected_faces)
-        cv2.imwrite("pictures/landmark.jpg", preprocessed)
+        cv2.imwrite("SVM_Pre/landmark.jpg", preprocessed)
 
-        im = Image.open("pictures/landmark.jpg")
+        im = Image.open("SVM_Pre/landmark.jpg")
         a = calculate_brightness(im)
         c = -0.3/math.log10(a)
         g = np.array(im)
         gamma_corrected = exposure.adjust_gamma(g, c)
         
         gamma_corrected_image = Image.fromarray(gamma_corrected)
-        gamma_corrected_image.save("pictures/gamma.png")
+        gamma_corrected_image.save("SVM_Pre/gamma.png")
         # gamma_corrected_image.show()
 
         i = exposure.equalize_adapthist(gamma_corrected)
         ii = Image.fromarray((i * 255).astype(np.uint8))
-        ii.save("pictures/"+ person_name + "temp.jpg")
-        ii.save("pictures/temp.jpg")
-        temp = cv2.imread("pictures/temp.jpg")
-        input_embeddings[person_name] = image_to_embedding(temp, model)
+        ii.save("SVM_Pre/"+ person_name + "temp.jpg")
+        ii.save("SVM_Pre/temp.jpg")
+        temp = cv2.imread("SVM_Pre/temp.jpg")
+        input_embeddings.append(image_to_embedding(temp, model))
+        names.append(person_name)
         
-    return input_embeddings
+    return input_embeddings,names
+def create_image_embedding():
+    img = "jape4.jpg"
+    person_name = os.path.splitext(os.path.basename(img))[0]
+    image_file = cv2.imread(img, 1)
+    detected_faces = face_detector(image_file, 1)
+    preprocessed = landmarks(image_file,detected_faces)
+    cv2.imwrite("SVM_Pre/landmark.jpg", preprocessed)
 
-def landmarks(img,dets):
-    faces = dlib.full_object_detections()
-    for detection in dets:
-        faces.append(sp(img, detection))
-
-    images = dlib.get_face_chips(img, faces)
-    for image in images:
-       return image
-
-def recognize_faces_in_cam(input_embeddings):
+    im = Image.open("SVM_Pre/landmark.jpg")
+    a = calculate_brightness(im)
+    c = -0.3/math.log10(a)
+    g = np.array(im)
+    gamma_corrected = exposure.adjust_gamma(g, c)
     
+    gamma_corrected_image = Image.fromarray(gamma_corrected)
+    gamma_corrected_image.save("SVM_Pre/gamma.png")
+    # gamma_corrected_image.show()
 
-   
-
-    cv2.namedWindow("Face Recognizer")
-    vc = cv2.VideoCapture(0)
-   
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
+    i = exposure.equalize_adapthist(gamma_corrected)
+    ii = Image.fromarray((i * 255).astype(np.uint8))
+    ii.save("SVM_Pre/"+ person_name + "temp.jpg")
+    ii.save("SVM_Pre/temp.jpg")
+    temp = cv2.imread("SVM_Pre/temp.jpg")
+    output_image = image_to_embedding(temp, model)
     
-    
-    while True:
-        # Capture frame-by-frame
-        ret, frame = vc.read()
+    return output_image
+input_embeddings,names = create_input_image_embeddings()
+input_embedding = create_image_embedding()
 
-        
-        img = frame
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        detected_faces = face_detector(frame, 1)
-        # Loop through all the faces detected 
-        identities = []
-        for i, face_rect in enumerate(detected_faces):
-           
-            preprocessed = landmarks(frame,detected_faces)
-            cv2.imwrite("pictures/livelandmark.jpg", preprocessed)
-            im = Image.open("pictures/livelandmark.jpg")
-            a = calculate_brightness(im)
-            c = -0.3/math.log10(a)
-            g = np.array(im)
-            gamma_corrected = exposure.adjust_gamma(g, c)
-            
-            gamma_corrected_image = Image.fromarray(gamma_corrected)
-            gamma_corrected_image.save("pictures/livegamma.png")
-            # gamma_corrected_image.show()
 
-            i = exposure.equalize_adapthist(gamma_corrected)
-            ii = Image.fromarray((i * 255).astype(np.uint8))
-            ii.save("pictures/livetemp.jpg")
-            temp = cv2.imread("pictures/livetemp.jpg")
-            identity = recognize_face(temp, input_embeddings, model)
-            if identity is not None:
-                img = cv2.rectangle(frame, (face_rect.left(),  face_rect.top()),(face_rect.right(),face_rect.bottom()), (0, 255, 0), 2) 
-                cv2.putText(img, str(identity), (face_rect.left()+5,face_rect.right()-5), font, 1, (255,255,255), 2)
-        
-        key = cv2.waitKey(100)
-        cv2.imshow("Face Recognizer", img)
 
-        if key == 27: # exit on ESC
-            break
-    vc.release()
-    cv2.destroyAllWindows()
+for i in names:
+    index = names.index(i)
+    remove_digits = str.maketrans('', '', digits)
+    res = i.translate(remove_digits)
+    names[index] = res
 
-input_embeddings = create_input_image_embeddings()
-recognize_faces_in_cam(input_embeddings)
+#print(input_embeddings)
+print(names)
+rt = np.array(input_embeddings)
+wt = np.array(input_embedding)
+nsamples, nx, ny = rt.shape
+d2_train_dataset = rt.reshape((nsamples,nx*ny))
+print(rt)
+print(input_embeddings)
+clf = svm.SVC(kernel='linear', probability=True)
+svc = clf.fit(d2_train_dataset,names)
+print(clf.predict_proba(wt))
+print(clf.predict(wt))
+print(clf.decision_function(wt))
+
