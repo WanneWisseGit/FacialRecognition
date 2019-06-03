@@ -7,7 +7,7 @@ while(True):
     # Capture frame-by-frame
     ret, frame = cap.read()
 
-    cv2.imwrite("SVM_images/wanne" + str(count) + ".jpg", frame)
+    cv2.imwrite("SVM_images/wiggert" + str(count) + ".jpg", frame)
     count = count + 1
     # Display the resulting frame
     cv2.imshow('frame',frame)
