@@ -85,10 +85,14 @@ while True:
         live_embedding = facerec.compute_face_descriptor(rgb_image,shape)  
         g = clf.predict([live_embedding])
         print(g[0])
-        print(clf.predict_proba([live_embedding]))
         cv2.rectangle(img,(d.left(), d.top()), (d.right(), d.bottom()), color_green, line_width)
-        cv2.putText(img, g[0], (d.left(), d.top()),
-			cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        proba = clf.predict_proba([live_embedding])
+        print(proba)
+        for index, prob in enumerate(proba[0]):
+            if (prob>0.46):
+                print(prob)
+                cv2.putText(img, g[0], (d.left(), d.top()),cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                
     cv2.imshow('my webcam', img)
     if cv2.waitKey(1) == 27:
         break  # esc to quit

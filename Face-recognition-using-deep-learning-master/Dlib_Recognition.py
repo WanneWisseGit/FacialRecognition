@@ -59,7 +59,7 @@ def recognize_face(face, embeddings, names):
 
         
 
-cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture(1)
 color_green = (0,255,0)
 line_width = 3
 while True:
