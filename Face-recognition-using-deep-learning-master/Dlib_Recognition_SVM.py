@@ -76,22 +76,23 @@ color_green = (0,255,0)
 line_width = 3
 while True:
     ret_val, img = cam.read()
+    #img = cv2.resize(img, dsize = None, fx = 0.5, fy=0.5)
     rgb_image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     dets = detector(rgb_image,1)
-    live_embedding = []
+    #live_embedding = []
     for i, d in enumerate(dets):
         # Get the landmarks/parts for the face in box d.
         shape = sp(rgb_image, d)
         live_embedding = facerec.compute_face_descriptor(rgb_image,shape)  
         g = clf.predict([live_embedding])
-        print(g[0])
-        cv2.rectangle(img,(d.left(), d.top()), (d.right(), d.bottom()), color_green, line_width)
+        #print(g[0])
+        #cv2.rectangle(img,(d.left(), d.top()), (d.right(), d.bottom()), color_green, line_width)
         proba = clf.predict_proba([live_embedding])
-        print(proba)
+        #rint(proba)
         for index, prob in enumerate(proba[0]):
             if (prob>0.46):
                 print(prob)
-                cv2.putText(img, g[0], (d.left(), d.top()),cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                #cv2.putText(img, g[0], (d.left(), d.top()),cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
     cv2.imshow('my webcam', img)
     if cv2.waitKey(1) == 27:
